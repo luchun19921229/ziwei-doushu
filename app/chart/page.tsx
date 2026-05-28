@@ -2,9 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import BirthForm, { type BirthFormState } from '@/components/BirthForm';
-import TopBar, { type TimeView } from '@/components/chart/TopBar';
-import ChartBoard from '@/components/chart/ChartBoard';
-import InsightPanel, { type FocusState } from '@/components/insight/InsightPanel';
+import TimeNav, { type TimeView } from '@/components/TimeNav';
+import ChartBoard from '@/components/ChartBoard';
+import InsightPanel from '@/components/InsightPanel';
 import PatternsCard from '@/components/PatternsCard';
 import FamousPersonCard from '@/components/FamousPersonCard';
 import ShareModal from '@/components/ShareModal';
@@ -28,10 +28,9 @@ export default function ChartPage() {
   // ── 时间视图状态 ──────────────────────────────────────────
   const [view, setView] = useState<TimeView>('mingpan');
   const [liunianYear, setLiunianYear] = useState(new Date().getFullYear());
-  const [liuyueMonth, setLiuyueMonth] = useState(new Date().getMonth() + 1);
 
   // ── 聚焦状态（宫位/星曜/四化）────────────────────────────
-  const [focus, setFocus] = useState<FocusState | null>(null);
+  const [focus, setFocus] = useState<{ type: 'star' | 'palace' | 'sihua'; label: string; star?: Star; palace?: Palace; siHua?: string } | null>(null);
 
   const { history, save: saveHistory, remove: removeHistory } = useHistory();
 
@@ -270,17 +269,12 @@ export default function ChartPage() {
         <div className="chart-page-root">
 
           {/* 顶部时间导航栏 */}
-          <TopBar
+          <TimeNav
             chart={chart}
             view={view}
             liunianYear={liunianYear}
-            liuyueMonth={liuyueMonth}
             onViewChange={setView}
             onYearChange={setLiunianYear}
-            onMonthChange={setLiuyueMonth}
-            onShare={savedForm ? handleShare : undefined}
-            onExport={() => window.print()}
-            copied={copied}
           />
 
           {/* 主体：桌面双栏 / 手机上下堆叠 */}
@@ -290,12 +284,9 @@ export default function ChartPage() {
             <div className="chart-workspace-left">
               <ChartBoard
                 chart={chart}
-                view={view}
-                liunianYear={liunianYear}
-                onStarClick={handleStarClick}
-                onPalaceClick={handlePalaceClick}
-                onSiHuaBadgeClick={handleSiHuaBadgeClick}
-                onTimeViewChange={setView}
+                onStarSelect={handleStarClick}
+                onPalaceSelect={handlePalaceClick}
+                onSiHuaClick={handleSiHuaBadgeClick}
               />
 
               {/* 底部操作区 */}
@@ -338,11 +329,8 @@ export default function ChartPage() {
               <PatternsCard chart={chart} />
               <InsightPanel
                 chart={chart}
-                view={view}
-                liunianYear={liunianYear}
-                liuyueMonth={liuyueMonth}
-                focus={focus}
-                onClearFocus={() => setFocus(null)}
+                selectedPalace={focus?.type === 'palace' ? focus.palace : undefined}
+                selectedSiHua={focus?.type === 'sihua' ? { starName: focus.label.split(' ')[0].replace('化', ''), siHua: focus.siHua!, view } : undefined}
               />
             </div>
 
