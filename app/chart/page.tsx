@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import BirthForm, { type BirthFormState } from '@/components/BirthForm';
-import TimeNav, { type TimeView } from '@/components/TimeNav';
 import ChartBoard from '@/components/ChartBoard';
 import InsightPanel from '@/components/InsightPanel';
 import PatternsCard from '@/components/PatternsCard';
@@ -10,6 +9,7 @@ import FamousPersonCard from '@/components/FamousPersonCard';
 import ShareModal from '@/components/ShareModal';
 import { FAMOUS_PERSONS } from '@/lib/ziwei/famous';
 import type { BirthInfo, ZiweiChart, Star, Palace } from '@/lib/ziwei/types';
+import type { TimeView } from '@/components/TimeNav';
 import { formToSearchParams, searchParamsToForm, formToBirthInfo } from '@/lib/ziwei/share';
 import { useHistory } from '@/lib/ziwei/history';
 
@@ -25,12 +25,8 @@ export default function ChartPage() {
   const [copied, setCopied] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
-  // ── 时间视图状态 ──────────────────────────────────────────
-  const [view, setView] = useState<TimeView>('mingpan');
-  const [liunianYear, setLiunianYear] = useState(new Date().getFullYear());
-
   // ── 聚焦状态（宫位/星曜/四化）────────────────────────────
-  const [focus, setFocus] = useState<{ type: 'star' | 'palace' | 'sihua'; label: string; star?: Star; palace?: Palace; siHua?: string } | null>(null);
+  const [focus, setFocus] = useState<{ type: 'star' | 'palace' | 'sihua'; label: string; star?: Star; palace?: Palace; siHua?: string; view?: TimeView } | null>(null);
 
   const { history, save: saveHistory, remove: removeHistory } = useHistory();
 
@@ -48,7 +44,7 @@ export default function ChartPage() {
     };
     setSavedForm(fullForm);
     handleSubmit(formToBirthInfo(fullForm));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── 起盘 ──────────────────────────────────────────────────
   const handleSubmit = async (info: BirthInfo) => {
@@ -67,7 +63,6 @@ export default function ChartPage() {
       const data: ZiweiChart = await res.json();
       setChart(data);
       setFocus(null);
-      setView('mingpan');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '生成失败，请重试');
     } finally {
@@ -82,23 +77,26 @@ export default function ChartPage() {
     setFocus(null);
     setSavedForm(null);
     setFormKey(k => k + 1);
-    setView('mingpan');
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/chart');
     }
   };
 
   // ── 分享：暂关闭（隐私问题：分享卡含出生日期+城市，等于暴露身份信息）──
-  // 后续要做需先解决：① 出生信息脱敏（只保留命宫主星等不可逆信息）
-  //                  ② 用户主动选择分享多少信息
-  //                  ③ 链接生成短码避免 URL 暴露
   const handleShare = () => {
     alert('分享功能正在完善中（隐私脱敏方案）— 公测版本将正式开放');
   };
 
-  // 计算分享 URL（OG 卡片图改为前端 Canvas 渲染，不再走 SSR）
+  // 计算分享 URL (隐私脱敏：仅包含年月日，不包含具体时间和城市)
   const shareUrl = savedForm
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/chart?${formToSearchParams(savedForm).toString()}`
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/chart?${formToSearchParams({
+        ...savedForm,
+        clockHour: '8',
+        clockMinute: '0',
+        province: '',
+        city: '',
+        longitude: 120,
+      }).toString()}`
     : '';
 
   const handleLoadHistory = (form: BirthFormState) => {
@@ -119,8 +117,8 @@ export default function ChartPage() {
     setFocus({ type: 'palace', label: palace.name, palace });
   };
 
-  const handleSiHuaBadgeClick = (starName: string, siHua: string) => {
-    setFocus({ type: 'sihua', label: `${starName} 化${siHua}`, siHua });
+  const handleSiHuaBadgeClick = (starName: string, siHua: string, view: TimeView) => {
+    setFocus({ type: 'sihua', label: `${starName} 化${siHua}`, siHua, view });
   };
 
   // ─────────────────────────────────────────────────────────
@@ -184,7 +182,6 @@ export default function ChartPage() {
               initialData={savedForm ?? undefined}
               onFormSave={form => {
                 setSavedForm(form);
-                // 只在关键字段齐全时才同步 URL + 历史；否则 BirthForm mount 时的空值会覆盖现有合法 URL
                 if (form.year && form.month && form.day) {
                   saveHistory(form);
                   const params = formToSearchParams(form);
@@ -268,73 +265,60 @@ export default function ChartPage() {
         ═══════════════════════════════════════════════════ */
         <div className="chart-page-root">
 
-          {/* 顶部时间导航栏 */}
-          <TimeNav
-            chart={chart}
-            view={view}
-            liunianYear={liunianYear}
-            onViewChange={setView}
-            onYearChange={setLiunianYear}
-          />
+          {/* 左栏：命盘主舞台（含时间导航） */}
+          <div className="chart-workspace-left">
+            <ChartBoard
+              chart={chart}
+              onStarSelect={handleStarClick}
+              onPalaceSelect={handlePalaceClick}
+              onSiHuaClick={handleSiHuaBadgeClick}
+            />
 
-          {/* 主体：桌面双栏 / 手机上下堆叠 */}
-          <div className="chart-workspace">
-
-            {/* 左栏：命盘主舞台 */}
-            <div className="chart-workspace-left">
-              <ChartBoard
-                chart={chart}
-                onStarSelect={handleStarClick}
-                onPalaceSelect={handlePalaceClick}
-                onSiHuaClick={handleSiHuaBadgeClick}
-              />
-
-              {/* 底部操作区 */}
-              <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                <button
-                  onClick={handleReset}
-                  style={{
-                    fontSize: '11px', color: 'var(--tx-3)',
-                    background: 'none', border: '1px solid var(--bdr)',
-                    borderRadius: 'var(--r-pill)', padding: '5px 16px',
-                    cursor: 'pointer', transition: 'color 0.15s, border-color 0.15s',
-                  }}
-                  onMouseEnter={e => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.color = 'var(--tx-1)';
-                    el.style.borderColor = 'var(--bdr-med)';
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.color = 'var(--tx-3)';
-                    el.style.borderColor = 'var(--bdr)';
-                  }}
-                >
-                  重新起盘
-                </button>
-              </div>
+            {/* 底部操作区 */}
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+              <button
+                onClick={handleReset}
+                style={{
+                  fontSize: '11px', color: 'var(--tx-3)',
+                  background: 'none', border: '1px solid var(--bdr)',
+                  borderRadius: 'var(--r-pill)', padding: '5px 16px',
+                  cursor: 'pointer', transition: 'color 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.color = 'var(--tx-1)';
+                  el.style.borderColor = 'var(--bdr-med)';
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.color = 'var(--tx-3)';
+                  el.style.borderColor = 'var(--bdr)';
+                }}
+              >
+                重新起盘
+              </button>
             </div>
-
-            {/* 右栏：洞察工作区 */}
-            <div className="chart-workspace-right">
-              {(() => {
-                const famous = FAMOUS_PERSONS.find(p =>
-                  p.name === chart.birthInfo.name &&
-                  p.year === chart.birthInfo.year &&
-                  p.month === chart.birthInfo.month &&
-                  p.day === chart.birthInfo.day,
-                );
-                return famous ? <FamousPersonCard person={famous} /> : null;
-              })()}
-              <PatternsCard chart={chart} />
-              <InsightPanel
-                chart={chart}
-                selectedPalace={focus?.type === 'palace' ? focus.palace : undefined}
-                selectedSiHua={focus?.type === 'sihua' ? { starName: focus.label.split(' ')[0].replace('化', ''), siHua: focus.siHua!, view } : undefined}
-              />
-            </div>
-
           </div>
+
+          {/* 右栏：洞察工作区 */}
+          <div className="chart-workspace-right">
+            {(() => {
+              const famous = chart?.birthInfo ? FAMOUS_PERSONS.find(p =>
+                p.name === chart.birthInfo!.name &&
+                p.year === chart.birthInfo!.year &&
+                p.month === chart.birthInfo!.month &&
+                p.day === chart.birthInfo!.day,
+              ) : undefined;
+              return famous ? <FamousPersonCard person={famous} /> : null;
+            })()}
+            <PatternsCard chart={chart} />
+            <InsightPanel
+              chart={chart}
+              selectedPalace={focus?.type === 'palace' ? focus.palace : undefined}
+              selectedSiHua={focus?.type === 'sihua' ? { starName: focus.label.split(' ')[0].replace('化', ''), siHua: focus.siHua!, view: (focus as any).view || 'mingpan' } : undefined}
+            />
+          </div>
+
         </div>
       )}
 
